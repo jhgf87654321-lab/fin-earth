@@ -27,9 +27,12 @@ export class Basic {
   initScenes() {
     this.scene = new THREE.Scene();
 
+    const width = this.dom.clientWidth || window.innerWidth
+    const height = this.dom.clientHeight || window.innerHeight
+
     this.camera = new THREE.PerspectiveCamera(
       45,
-      window.innerWidth / window.innerHeight,
+      width / height,
       1,
       100000
     );
@@ -41,7 +44,7 @@ export class Basic {
       antialias: true, // 抗锯齿
     });
     this.renderer.setPixelRatio(window.devicePixelRatio); // 设置屏幕像素比
-    this.renderer.setSize(window.innerWidth, window.innerHeight); // 设置渲染器宽高
+    this.renderer.setSize(width, height); // 设置渲染器宽高
     this.dom.appendChild(this.renderer.domElement); // 添加到dom中
   }
 

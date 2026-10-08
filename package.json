@@ -1,18 +1,22 @@
 {
-  "name": "GhostCat",
+  "name": "fin-earth",
   "version": "1.0.0",
-  "description": "3d-earth",
+  "description": "3D Earth + Sina Finance 7x24 news",
   "keywords": [
-    "GhostCat",
+    "finance",
     "3d",
     "threejs",
-    "typescript"
+    "typescript",
+    "sina"
   ],
   "author": "GhostCat",
   "license": "MIT",
   "scripts": {
-    "dev": "webpack serve --mode development",
+    "dev:client": "webpack serve --mode development",
+    "dev:server": "node server/index.js",
+    "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:client\"",
     "build": "webpack --mode production",
+    "start": "node server/index.js",
     "lint": "eslint",
     "prepare": "husky install"
   },
@@ -31,6 +35,7 @@
     "@typescript-eslint/parser": "^5.13.0",
     "babel-loader": "^8.2.2",
     "clean-webpack-plugin": "^3.0.0",
+    "concurrently": "^9.2.4",
     "copy-webpack-plugin": "^9.0.1",
     "core-js": "^3.8.1",
     "css-loader": "^6.2.0",
@@ -49,6 +54,7 @@
   "dependencies": {
     "@tweakpane/core": "^1.0.6",
     "eslint-webpack-plugin": "^3.1.1",
+    "express": "^4.22.3",
     "gsap": "^3.7.1",
     "html2canvas": "^1.4.1",
     "lodash": "^4.17.21",

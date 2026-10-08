@@ -12,6 +12,7 @@ import earthFragment from '../../shaders/earth/fragment.fs';
 import { createAnimateLine, createLightPillar, createPointMesh, createWaveMesh, getCirclePoints, lon2xyz } from "../Utils/common";
 import gsap from "gsap";
 import { flyArc } from "../Utils/arc";
+import { City } from "./cities";
 
 export type punctuation = {
   circleColor: number,
@@ -34,6 +35,7 @@ type options = {
       N: number, // 维度
     }[]
   }[]
+  cities: City[]
   dom: HTMLElement,
   textures: Record<string, Texture>, // 贴图
   earth: {
@@ -87,6 +89,10 @@ export default class earth {
   public n: number;
   public isRotation: boolean;
   public flyLineArcGroup: Group;
+  public cityGroups: Map<string, Group>;
+  public cityWaveMap: Map<string, Object3D>;
+  public activeCityId: string | null;
+  public newsCityIds: Set<string>;
 
   constructor(options: options) {
 
@@ -103,6 +109,10 @@ export default class earth {
     this.markupPoint = new Group()
     this.markupPoint.name = "markupPoint"
     this.waveMeshArr = []
+    this.cityGroups = new Map()
+    this.cityWaveMap = new Map()
+    this.activeCityId = null
+    this.newsCityIds = new Set()
 
     // 卫星和标签
     this.circleLineList = []
@@ -326,73 +336,78 @@ export default class earth {
   }
 
   async createMarkupPoint() {
+    const radius = this.options.earth.radius;
+    this.punctuationMaterial = new MeshBasicMaterial({
+      color: this.options.punctuation.circleColor,
+      map: this.options.textures.label,
+      transparent: true,
+      depthWrite: false,
+    });
 
-    await Promise.all(this.options.data.map(async (item) => {
+    this.options.cities.forEach((city, index) => {
+      const lon = city.E;
+      const lat = city.N;
+      const cityGroup = new Group();
+      cityGroup.name = `city-${city.id}`;
+      cityGroup.userData.cityId = city.id;
 
-      const radius = this.options.earth.radius;
-      const lon = item.startArray.E; //经度
-      const lat = item.startArray.N; //纬度
-
-      this.punctuationMaterial = new MeshBasicMaterial({
-        color: this.options.punctuation.circleColor,
-        map: this.options.textures.label,
-        transparent: true, //使用背景透明的png贴图，注意开启透明计算
-        depthWrite: false, //禁止写入深度缓冲区数据
-      });
-
-      const mesh = createPointMesh({ radius, lon, lat, material: this.punctuationMaterial }); //光柱底座矩形平面
-      this.markupPoint.add(mesh);
-      const LightPillar = createLightPillar({
-        radius: this.options.earth.radius,
+      const mesh = createPointMesh({
+        radius,
         lon,
         lat,
-        index: 0,
+        material: this.punctuationMaterial,
+      });
+      mesh.userData.cityId = city.id;
+      cityGroup.add(mesh);
+
+      const LightPillar = createLightPillar({
+        radius,
+        lon,
+        lat,
+        index: index === 0 ? 0 : 1,
         textures: this.options.textures,
         punctuation: this.options.punctuation,
-      }); //光柱
-      this.markupPoint.add(LightPillar);
-      const WaveMesh = createWaveMesh({ radius, lon, lat, textures: this.options.textures }); //波动光圈
-      this.markupPoint.add(WaveMesh);
-      this.waveMeshArr.push(WaveMesh);
+      });
+      LightPillar.userData.cityId = city.id;
+      LightPillar.traverse((child) => {
+        child.userData.cityId = city.id;
+      });
+      cityGroup.add(LightPillar);
 
-      await Promise.all(item.endArray.map((obj) => {
-        const lon = obj.E; //经度
-        const lat = obj.N; //纬度
-        const mesh = createPointMesh({ radius, lon, lat, material: this.punctuationMaterial }); //光柱底座矩形平面
-        this.markupPoint.add(mesh);
-        const LightPillar = createLightPillar({
-          radius: this.options.earth.radius,
-          lon,
-          lat,
-          index: 1,
-          textures: this.options.textures,
-          punctuation: this.options.punctuation
-        }); //光柱
-        this.markupPoint.add(LightPillar);
-        const WaveMesh = createWaveMesh({ radius, lon, lat, textures: this.options.textures }); //波动光圈
-        this.markupPoint.add(WaveMesh);
-        this.waveMeshArr.push(WaveMesh);
-      }))
-      this.earthGroup.add(this.markupPoint)
-    }))
+      const WaveMesh = createWaveMesh({
+        radius,
+        lon,
+        lat,
+        textures: this.options.textures,
+      });
+      WaveMesh.userData.cityId = city.id;
+      cityGroup.add(WaveMesh);
+      this.waveMeshArr.push(WaveMesh);
+      this.cityWaveMap.set(city.id, WaveMesh);
+
+      this.markupPoint.add(cityGroup);
+      this.cityGroups.set(city.id, cityGroup);
+    });
+
+    this.earthGroup.add(this.markupPoint);
   }
 
   async createSpriteLabel() {
-    await Promise.all(this.options.data.map(async item => {
-      let cityArry = [];
-      cityArry.push(item.startArray);
-      cityArry = cityArry.concat(...item.endArray);
-      await Promise.all(cityArry.map(async e => {
+    await Promise.all(
+      this.options.cities.map(async (e) => {
         const p = lon2xyz(this.options.earth.radius * 1.001, e.E, e.N);
         const div = `<div class="fire-div">${e.name}</div>`;
         const shareContent = document.getElementById("html2canvas");
         shareContent.innerHTML = div;
         const opts = {
-          backgroundColor: null, // 背景透明
+          backgroundColor: null,
           scale: 6,
           dpi: window.devicePixelRatio,
         };
-        const canvas = await html2canvas(document.getElementById("html2canvas"), opts)
+        const canvas = await html2canvas(
+          document.getElementById("html2canvas"),
+          opts
+        );
         const dataURL = canvas.toDataURL("image/png");
         const map = new TextureLoader().load(dataURL);
         const material = new SpriteMaterial({
@@ -403,9 +418,36 @@ export default class earth {
         const len = 5 + (e.name.length - 2) * 2;
         sprite.scale.set(len, 3, 1);
         sprite.position.set(p.x * 1.1, p.y * 1.1, p.z * 1.1);
+        sprite.userData.cityId = e.id;
         this.earth.add(sprite);
-      }))
-    }))
+      })
+    );
+  }
+
+  setActiveCity(cityId: string | null) {
+    this.activeCityId = cityId;
+    this.cityGroups.forEach((group, id) => {
+      const active = cityId !== null && id === cityId;
+      const hasNews = this.newsCityIds.has(id);
+      const scale = active ? 1.35 : hasNews ? 1.15 : 1;
+      group.scale.set(scale, scale, scale);
+    });
+  }
+
+  setNewsCities(cityIds: string[]) {
+    this.newsCityIds = new Set(cityIds);
+    this.setActiveCity(this.activeCityId);
+  }
+
+  pickCityId(object: Object3D | null): string | null {
+    let current: Object3D | null = object;
+    while (current) {
+      if (current.userData && current.userData.cityId) {
+        return current.userData.cityId as string;
+      }
+      current = current.parent;
+    }
+    return null;
   }
 
   createAnimateCircle() {
@@ -557,16 +599,23 @@ export default class earth {
 
     if (this.waveMeshArr.length) {
       this.waveMeshArr.forEach((mesh: Mesh) => {
-        mesh.userData['scale'] += 0.007;
+        const cityId = mesh.userData['cityId'] as string | undefined;
+        const boost =
+          cityId &&
+          (this.newsCityIds.has(cityId) || this.activeCityId === cityId)
+            ? 0.014
+            : 0.007;
+        mesh.userData['scale'] += boost;
         mesh.scale.set(
           mesh.userData['size'] * mesh.userData['scale'],
           mesh.userData['size'] * mesh.userData['scale'],
           mesh.userData['size'] * mesh.userData['scale']
         );
         if (mesh.userData['scale'] <= 1.5) {
-          (mesh.material as Material).opacity = (mesh.userData['scale'] - 1) * 2; //2等于1/(1.5-1.0)，保证透明度在0~1之间变化
+          (mesh.material as Material).opacity = (mesh.userData['scale'] - 1) * 2;
         } else if (mesh.userData['scale'] > 1.5 && mesh.userData['scale'] <= 2) {
-          (mesh.material as Material).opacity = 1 - (mesh.userData['scale'] - 1.5) * 2; //2等于1/(2.0-1.5) mesh缩放2倍对应0 缩放1.5被对应1
+          (mesh.material as Material).opacity =
+            1 - (mesh.userData['scale'] - 1.5) * 2;
         } else {
           mesh.userData['scale'] = 1;
         }

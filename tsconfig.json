@@ -1,6 +1,7 @@
 {
   "include": [
-      "src/ts/**/*"
+      "src/ts/**/*",
+      "shared/**/*.json"
   ],
   "compilerOptions": {
       "module": "ESNext",
@@ -9,6 +10,9 @@
       "declaration": true,
       "declarationDir": "build/types",
       "baseUrl": ".",
-      "noImplicitAny": false
+      "noImplicitAny": false,
+      "resolveJsonModule": true,
+      "esModuleInterop": true,
+      "allowSyntheticDefaultImports": true
   }
 }
